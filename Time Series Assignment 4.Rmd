@@ -1,0 +1,128 @@
+---
+title: "Baggage Complaints Time Series Analysis"
+author: "Muskan Gupta"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Required Libraries
+```{r}
+library(tidyverse)
+library(lubridate)
+library(forecast)
+library(TTR)
+library(knitr)
+```
+
+## Load Dataset
+```{r}
+df <- read.csv("/Users/muskangupta/Downloads/baggagecomplaints.csv")
+df$Date <- as.Date(paste(df$Month, df$Year, 1, sep="-"), format="%m-%Y-%d")
+df <- df %>% arrange(Date)
+```
+
+## Exploratory Data Analysis (EDA)
+### Time Series Plot
+```{r}
+ts_data <- ts(df$Baggage, start = c(df$Year[1], df$Month[1]), frequency = 12)
+autoplot(ts_data) + ggtitle("Time Series of Baggage Complaints") + ylab("Number of Complaints")
+```
+
+**Interpretation:** The time series plot of baggage complaints shows strong fluctuations over time. There are visible peaks and dips, indicating possible seasonal patterns and trends.
+
+### Autocorrelation Function (ACF)
+```{r}
+Acf(ts_data, main="Autocorrelation Function (ACF) of Baggage Complaints")
+```
+
+**Interpretation:** The ACF plot shows significant autocorrelation at various lags, especially around 12 months. This suggests seasonality in the data, meaning complaints tend to follow a repeating yearly pattern.
+
+### Time Series Decomposition
+```{r}
+decomp <- stl(ts_data, s.window = "periodic")
+autoplot(decomp) + ggtitle("Decomposition of Baggage Complaints Time Series")
+```
+
+**Interpretation:** The trend component shows a general decline in baggage complaints after 2015. The seasonal component confirms the presence of a repeating pattern. The residual component captures unexplained variations, showing some spikes.
+
+## Forecasting Models
+### Naïve Forecast
+```{r}
+naive_model <- naive(ts_data, h=12)
+autoplot(naive_model) + ggtitle("Naïve Model Forecast")
+```
+
+**Interpretation:** The Naïve Model assumes that the most recent observation is the best predictor for future values. It is not useful when there is seasonality or a trend. It has the highest MAE (15815.429), indicating poor predictive performance.
+
+### Moving Average Forecast
+```{r}
+moving_avg <- ma(ts_data, order=12)
+autoplot(ts_data) + autolayer(moving_avg, series="Moving Average", color='red') + ggtitle("Moving Average Forecast")
+```
+
+**Interpretation:** The Moving Average Model smooths out fluctuations by averaging over a window (e.g., 12 months). It can handle some trends but does not predict future changes effectively. MAE = 9304.928, an improvement over the naïve model but still not the best.
+
+### Exponential Smoothing Models
+#### Simple Exponential Smoothing (SES)
+```{r}
+ses_model <- ses(ts_data, h=12)
+autoplot(ses_model) + ggtitle("Simple Exponential Smoothing Forecast")
+```
+
+**Interpretation:** SES gives more weight to recent observations. However, it does not handle seasonality or trends well. MAE = 9688.789, slightly worse than the moving average.
+
+#### Holt’s Linear Trend Model
+```{r}
+holt_model <- holt(ts_data, h=12)
+autoplot(holt_model) + ggtitle("Holt’s Linear Trend Model Forecast")
+```
+
+**Interpretation:** Holt’s Model captures both level and trend, making it better for trending data. It does not explicitly account for seasonality. MAE = 9680.711, slightly better than SES.
+
+#### Holt-Winters Model (Best Model)
+```{r}
+hw_model <- hw(ts_data, seasonal="additive", h=12)
+autoplot(hw_model) + ggtitle("Holt-Winters Model Forecast")
+```
+
+**Interpretation:** The Holt-Winters Model captures level, trend, and seasonality using exponential smoothing. It has the lowest MAE (4431.349), meaning it provides the most accurate forecasts. This makes sense because the data shows strong seasonal patterns, and this model adjusts accordingly.
+
+## Model Comparison
+### Plot All Forecasts Together
+```{r}
+autoplot(ts_data) +
+  autolayer(naive_model$mean, series="Naïve", color='blue') +
+  autolayer(moving_avg, series="Moving Avg", color='red') +
+  autolayer(ses_model$mean, series="SES", color='green') +
+  autolayer(holt_model$mean, series="Holt", color='purple') +
+  autolayer(hw_model$mean, series="HW", color='orange') +
+  ggtitle("Comparison of Forecasting Models")
+```
+
+### Accuracy Comparison
+```{r}
+accuracy_df <- data.frame(
+  Model = c("Naïve", "Moving Avg", "SES", "Holt", "Holt-Winters"),
+  MAE = c(
+    accuracy(naive_model)[2],
+    accuracy(moving_avg, ts_data)[2],
+    accuracy(ses_model)[2],
+    accuracy(holt_model)[2],
+    accuracy(hw_model)[2]
+  )
+)
+kable(accuracy_df)
+```
+
+**Interpretation:** The Holt-Winters Model has the lowest MAE, meaning it provides the most accurate predictions. Since baggage complaints data is seasonal, this model performs the best because it explicitly accounts for seasonality along with the trend.
+
+## Conclusion
+
+**Based on the model outputs, Holt-Winters Model is the best choice due to its lowest MAE and ability to handle seasonality. Naïve Model performed the worst, as expected, since it ignores trends and seasonality. Moving Average, SES, and Holt's Model perform better than Naïve but are not as accurate as Holt-Winters.**
+
+---
+This report provides a structured analysis of baggage complaints data, following best practices for time series forecasting.
